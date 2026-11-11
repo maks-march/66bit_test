@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using TechStore.Application.Abstractions;
 using TechStore.Domain.Entities;
 using TechStore.Infrastructure.Persistence;
 
@@ -8,6 +9,16 @@ namespace TechStore.Infrastructure.Seed;
 public sealed class DbSeeder
 {
     private const string SeededBy = "seed";
+
+    /// <summary>Фото по типу техники (embedded-ресурсы, по копии файла на каждую позицию).</summary>
+    private static readonly Dictionary<string, string> PhotoByType = new()
+    {
+        ["Телефон"] = "TechStore.Infrastructure.Seed.Photos.phone.jpg",
+        ["Телевизор"] = "TechStore.Infrastructure.Seed.Photos.tv.jpg",
+        ["Ноутбук"] = "TechStore.Infrastructure.Seed.Photos.laptop.jpg",
+        ["Холодильник"] = "TechStore.Infrastructure.Seed.Photos.fridge.jpg",
+        ["Наушники"] = "TechStore.Infrastructure.Seed.Photos.headphones.jpg",
+    };
 
     private static readonly (string Name, string Description)[] Manufacturers =
     [
@@ -55,10 +66,12 @@ public sealed class DbSeeder
     ];
 
     private readonly AppDbContext _db;
+    private readonly IFileStorage _files;
 
-    public DbSeeder(AppDbContext db)
+    public DbSeeder(AppDbContext db, IFileStorage files)
     {
         _db = db;
+        _files = files;
     }
 
     public async Task SeedAsync(CancellationToken ct = default)
@@ -82,12 +95,26 @@ public sealed class DbSeeder
 
         foreach (var (type, maker, model, country, price) in Items)
         {
+            var photoPath = await SaveSeedPhotoAsync(type, ct);
             await _db.EquipmentItems.AddAsync(EquipmentItem.Create(
                 types[type].Id, makers[maker].Id, countries[country].Id,
-                model, price, photoPath: null, SeededBy), ct);
+                model, price, photoPath, SeededBy), ct);
         }
 
         await _db.SaveChangesAsync(ct);
+    }
+
+    private async Task<string?> SaveSeedPhotoAsync(string typeName, CancellationToken ct)
+    {
+        if (!PhotoByType.TryGetValue(typeName, out var resource))
+            return null;
+
+        // Копия на каждую позицию: удаление одной не уронит фото соседей.
+        await using var stream = typeof(DbSeeder).Assembly.GetManifestResourceStream(resource);
+        if (stream is null)
+            return null; // ресурса нет в сборке — сидируем без фото, но не падаем
+
+        return await _files.SaveAsync(stream, "seed.jpg", ct);
     }
 
     private async Task<Manufacturer> EnsureManufacturerAsync(string name, string description, CancellationToken ct)

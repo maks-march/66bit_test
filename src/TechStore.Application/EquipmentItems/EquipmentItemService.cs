@@ -288,7 +288,12 @@ public sealed class EquipmentItemService : IEquipmentItemService
         try
         {
             var created = SupplyCountry.Create(normalized, _user.Name);
-            await _countries.AddAsync(created, ct); // без Save: коммитится вместе с позицией
+            await _countries.AddAsync(created, ct);
+            // Флаш до создания позиции: EF присвоит Id, иначе FK останется 0.
+            var saved = await _uow.TrySaveAsync(ct);
+            if (!saved.IsSuccess)
+                return Result<SupplyCountry>.Failure(saved.Error);
+
             return Result<SupplyCountry>.Success(created);
         }
         catch (DomainException ex)

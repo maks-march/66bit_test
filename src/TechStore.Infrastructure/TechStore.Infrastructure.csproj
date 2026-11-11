@@ -20,6 +20,11 @@
     <ProjectReference Include="..\TechStore.Application\TechStore.Application.csproj" />
   </ItemGroup>
 
+  <!-- Фото сидера: читаются через GetManifestResourceStream("TechStore.Infrastructure.Seed.Photos.<name>.jpg"). -->
+  <ItemGroup>
+    <EmbeddedResource Include="Seed\Photos\*.jpg" />
+  </ItemGroup>
+
   <!-- IHttpContextAccessor, IHostEnvironment, SignalR — из shared framework, без NuGet-пакетов. -->
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
