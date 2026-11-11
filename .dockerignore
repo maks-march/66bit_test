@@ -1,0 +1,111 @@
+# ============================================================
+# .NET 10 / C# 13 – Build & Compilation Outputs
+# ============================================================
+[Bb]in/
+[Oo]bj/
+[Aa]rtifacts/
+[Ll]og/
+[Ll]ogs/
+publish/
+published/
+Generated_Code/
+.dotnet/
+.tools/
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+ScaffoldingReadMe.txt
+*.binlog
+*.trx
+
+# ============================================================
+# Visual Studio / VS Code / Rider – User-specific & IDE files
+# ============================================================
+.vs/
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+*.slnx.user
+
+# Rider / JetBrains
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/usage.statistics.xml
+.idea/**/dictionaries
+.idea/**/shelf
+.idea/**/dataSources/
+.idea/**/dataSources.ids
+.idea/**/dataSources.local.xml
+.idea/**/sqlDataSources.xml
+.idea/**/dynamic.xml
+.idea/**/uiDesigner.xml
+.idea/**/dbnavigator.xml
+*.iws
+*.iml
+out/
+
+# VS Code – keep shared settings/launch, ignore the rest
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+*.code-workspace
+.history/
+*.vsix
+
+# ============================================================
+# Test Results & Coverage
+# ============================================================
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.VisualState.xml
+TestResult.xml
+nunit-*.xml
+coverage*.json
+coverage*.xml
+coverage*.info
+*.coverage
+*.coveragexml
+BenchmarkDotNet.Artifacts/
+
+# ============================================================
+# NuGet & Packages
+# ============================================================
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+
+# ============================================================
+# OS & Editor Temp Files
+# ============================================================
+*.tmp
+*.tmp_proj
+*~
+~$*
+*.swp
+*.*~
+.DS_Store
+Thumbs.db
+
+# ============================================================
+# Docker & Local Environment (если используете)
+# ============================================================
+# Секреты не должны попадать в контекст сборки
+**/.env
+# *.env.local
+# docker-compose.override.yml
+
+# ============================================================
+# Прочее (при необходимости раскомментируйте)
+# ============================================================
+# *.db
+# *.sqlite
+# node_modules/
+# bower_components/
