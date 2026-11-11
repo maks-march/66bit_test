@@ -14,7 +14,7 @@ public static class ErrorCodes
     public const string NotFound = "NOT_FOUND";
     public const string NameDuplicate = "NAME_DUPLICATE";
     public const string ReferenceInUse = "REFERENCE_IN_USE";
-    public const string ConcurrencyConflict = "CONCURRENCY_CONFLICT";
+    public const string ValidationError = "VALIDATION";
 
     public const string PhotoInvalid = "PHOTO_INVALID";
     public const string PhotoTooLarge = "PHOTO_TOO_LARGE";

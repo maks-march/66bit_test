@@ -7,7 +7,5 @@ namespace TechStore.Domain.Interfaces;
 /// </summary>
 public interface IUnitOfWork
 {
-    IRepository<T> Repository<T>() where T : AuditableEntity;
-
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
