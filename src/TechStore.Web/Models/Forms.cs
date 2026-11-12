@@ -22,7 +22,8 @@ public sealed class ItemFormModel
     public string? SupplyCountryName { get; set; }
 
     [Required(ErrorMessage = "Укажите цену.")]
-    [Range(typeof(decimal), "0.01", "999999999.99", ErrorMessage = "Цена должна быть от 0,01 до 999 999 999,99.")]
+    // Диапазон (>0, ≤ max) проверяет ItemDialog прямым сравнением:
+    // [Range] для decimal парсит границы строкой в текущей культуре и падает в ru-RU.
     public decimal? Price { get; set; }
 
     public ItemWriteRequest ToRequest()

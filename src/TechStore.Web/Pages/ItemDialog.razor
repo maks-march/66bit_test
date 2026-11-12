@@ -15,7 +15,7 @@
         {
             <div class="alert alert-danger">@_formError</div>
         }
-        <EditForm EditContext="_editContext" OnValidSubmit="SaveAsync">
+        <EditForm EditContext="_editContext" OnSubmit="HandleSubmitAsync">
             <DataAnnotationsValidator />
 
             <div class="mb-3">
@@ -118,7 +118,7 @@
     <FooterContent>
         <button type="button" class="btn btn-outline-secondary" disabled="@_busy" @onclick="OnCancel">Отмена</button>
         <button type="button" class="btn btn-primary" disabled="@(_busy || Types.Count == 0 || Manufacturers.Count == 0)"
-                @onclick="SubmitAsync">
+                @onclick="() => HandleSubmitAsync(_editContext)">
             @if (_busy)
             {
                 <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
@@ -221,11 +221,34 @@
         }
     }
 
-    /// <summary>Кнопка в футере — вне EditForm, поэтому валидируем вручную.</summary>
-    private async Task SubmitAsync()
+    /// <summary>
+    /// Единая точка сабмита: Enter в форме и кнопка в футере.
+    /// Сначала DataAnnotations, затем ручная проверка цены прямым сравнением decimal
+    /// (без строкового парсинга — он ломается в ru-RU).
+    /// </summary>
+    private async Task HandleSubmitAsync(EditContext context)
     {
-        if (_editContext.Validate())
-            await SaveAsync();
+        _messages.Clear();
+        var valid = context.Validate();
+        if (_model.Price is not null)
+        {
+            if (_model.Price <= 0)
+            {
+                _messages.Add(context.Field(nameof(ItemFormModel.Price)), "Цена должна быть больше 0.");
+                valid = false;
+            }
+            else if (_model.Price > 999999999.99m)
+            {
+                _messages.Add(context.Field(nameof(ItemFormModel.Price)), "Цена не должна превышать 999 999 999,99.");
+                valid = false;
+            }
+        }
+        if (!valid)
+        {
+            context.NotifyValidationStateChanged();
+            return;
+        }
+        await SaveAsync();
     }
 
     private async Task SaveAsync()
