@@ -1,46 +1,69 @@
+using Microsoft.Extensions.FileProviders;
+using Scalar.AspNetCore;
+using TechStore.Api.Infrastructure;
+using TechStore.Api.Middleware;
 using TechStore.Application;
 using TechStore.Infrastructure;
+using TechStore.Infrastructure.Files;
+using TechStore.Infrastructure.Notifications;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddSignalR(); 
+builder.Services.AddSignalR();
+builder.Services.AddControllers();
+builder.Services.AddProblemDetails();
+builder.Services.AddOpenApi(options => options.AddDocumentTransformer<OpenApiInfoTransformer>());
+builder.Services.AddHealthChecks()
+    .AddNpgSql(builder.Configuration.GetConnectionString("Default")!);
 
-builder.Services.AddOpenApi();
+// CORS: массив (Cors:AllowedOrigins:0..n) или одна строка через ';'.
+var corsSection = builder.Configuration.GetSection("Cors:AllowedOrigins");
+string[] corsOrigins = corsSection.GetChildren().Any()
+    ? corsSection.Get<string[]>() ?? []
+    : corsSection.Value?.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [];
+
+builder.Services.AddCors(options => options.AddPolicy("Web", policy =>
+{
+    if (corsOrigins.Length == 0 && builder.Environment.IsDevelopment())
+        policy.SetIsOriginAllowed(_ => true);
+    else
+        policy.WithOrigins(corsOrigins);
+
+    policy.AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+}));
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+app.UseMiddleware<DomainExceptionMiddleware>();
+
+var fileOptions = app.Configuration.GetSection(FileStorageOptions.SectionName).Get<FileStorageOptions>() ?? new();
+var uploadsRoot = Path.IsPathRooted(fileOptions.RootPath)
+    ? fileOptions.RootPath
+    : Path.Combine(app.Environment.ContentRootPath, fileOptions.RootPath);
+Directory.CreateDirectory(uploadsRoot);
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(uploadsRoot),
+    RequestPath = fileOptions.PublicPrefix,
+    ServeUnknownFileTypes = false,
+    OnPrepareResponse = ctx => ctx.Context.Response.Headers.CacheControl = "public,max-age=3600",
+});
+
 if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
+    app.UseHttpsRedirection();
 
-app.UseHttpsRedirection();
+app.UseRouting();
+app.UseCors("Web");
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+app.MapControllers();
+app.MapHub<InventoryHub>("/hubs/inventory");
+app.MapOpenApi();
+app.MapScalarApiReference(options => options.WithTitle("TechStore API"));
+app.MapHealthChecks("/health");
 
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+await app.ApplyMigrationsAndSeedAsync();
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}

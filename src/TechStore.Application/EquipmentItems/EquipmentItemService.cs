@@ -285,21 +285,23 @@ public sealed class EquipmentItemService : IEquipmentItemService
         if (existing is not null)
             return Result<SupplyCountry>.Success(existing);
 
+        SupplyCountry created;
         try
         {
-            var created = SupplyCountry.Create(normalized, _user.Name);
-            await _countries.AddAsync(created, ct);
-            // Флаш до создания позиции: EF присвоит Id, иначе FK останется 0.
-            var saved = await _uow.TrySaveAsync(ct);
-            if (!saved.IsSuccess)
-                return Result<SupplyCountry>.Failure(saved.Error);
-
-            return Result<SupplyCountry>.Success(created);
+            created = SupplyCountry.Create(normalized, _user.Name);
         }
         catch (DomainException ex)
         {
             return Result<SupplyCountry>.Failure(Error.FromDomainException(ex));
         }
+
+        await _countries.AddAsync(created, ct);
+
+        var flushed = await _uow.TrySaveAsync(ct);
+        if (!flushed.IsSuccess)
+            return Result<SupplyCountry>.Failure(flushed.Error);
+
+        return Result<SupplyCountry>.Success(created);
     }
 
     private async Task DeleteFileAttemptAsync(string? path, CancellationToken ct)
