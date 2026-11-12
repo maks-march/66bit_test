@@ -1,0 +1,139 @@
+@inject TechStoreApi Api
+@inject ToastService Toasts
+
+@* Создание/редактирование записи справочника. Дубликат имени (409) — тостом, как в мокапе. *@
+<ModalShell Title="@Title" OnClose="OnCancel">
+    <ChildContent>
+        @if (_formError is not null)
+        {
+            <div class="alert alert-danger">@_formError</div>
+        }
+        <EditForm EditContext="_editContext" OnValidSubmit="SaveAsync">
+            <DataAnnotationsValidator />
+            <div class="mb-3">
+                <label class="form-label required">Наименование</label>
+                <InputText @bind-Value="_model.Name" class="form-control" />
+                <ValidationMessage For="() => _model.Name" />
+            </div>
+            <div class="mb-0">
+                <label class="form-label">Описание</label>
+                <InputTextArea @bind-Value="_model.Description" class="form-control" rows="3" />
+                <ValidationMessage For="() => _model.Description" />
+            </div>
+        </EditForm>
+    </ChildContent>
+    <FooterContent>
+        <button type="button" class="btn btn-outline-secondary" disabled="@_busy" @onclick="OnCancel">Отмена</button>
+        <button type="button" class="btn btn-primary" disabled="@_busy" @onclick="SubmitAsync">
+            @if (_busy)
+            {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+            }
+            @(EditingId is null ? "Добавить" : "Сохранить")
+        </button>
+    </FooterContent>
+</ModalShell>
+
+@code {
+    [Parameter] public DictionaryKind Kind { get; set; }
+    [Parameter] public long? EditingId { get; set; }
+    [Parameter] public string? InitialName { get; set; }
+    [Parameter] public string? InitialDescription { get; set; }
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private DictionaryFormModel _model = new();
+    private EditContext _editContext = default!;
+    private ValidationMessageStore _messages = default!;
+    private bool _busy;
+    private string? _formError;
+
+    private string Title => (Kind, EditingId is null) switch
+    {
+        (DictionaryKind.Manufacturer, true) => "Добавить производителя",
+        (DictionaryKind.Manufacturer, false) => "Редактировать производителя",
+        (DictionaryKind.EquipmentType, true) => "Добавить тип техники",
+        _ => "Редактировать тип техники",
+    };
+
+    protected override void OnInitialized()
+    {
+        _model = new DictionaryFormModel { Name = InitialName, Description = InitialDescription };
+        _editContext = new EditContext(_model);
+        _messages = new ValidationMessageStore(_editContext);
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_editContext.Validate())
+            await SaveAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_busy)
+            return;
+        _busy = true;
+        _formError = null;
+        _messages.Clear();
+        _editContext.NotifyValidationStateChanged();
+
+        try
+        {
+            var request = _model.ToRequest();
+            if (Kind == DictionaryKind.Manufacturer)
+            {
+                if (EditingId is null)
+                    await Api.CreateManufacturerAsync(request, CancellationToken.None);
+                else
+                    await Api.UpdateManufacturerAsync(EditingId.Value, request, CancellationToken.None);
+            }
+            else
+            {
+                if (EditingId is null)
+                    await Api.CreateEquipmentTypeAsync(request, CancellationToken.None);
+                else
+                    await Api.UpdateEquipmentTypeAsync(EditingId.Value, request, CancellationToken.None);
+            }
+
+            Toasts.Success(EditingId is null ? "Запись добавлена" : "Изменения сохранены");
+            await OnSaved.InvokeAsync();
+        }
+        catch (ApiException ex) when (ex.FieldErrors is not null)
+        {
+            ApplyServerErrors(ex.FieldErrors);
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message, "Ошибка сохранения");
+        }
+        catch (Exception)
+        {
+            _formError = "Сервис временно недоступен. Попробуйте ещё раз.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void ApplyServerErrors(Dictionary<string, string[]> fields)
+    {
+        foreach (var (field, messages) in fields)
+        {
+            string? prop = field.Equals(nameof(DictionaryFormModel.Name), StringComparison.OrdinalIgnoreCase)
+                ? nameof(DictionaryFormModel.Name)
+                : field.Equals(nameof(DictionaryFormModel.Description), StringComparison.OrdinalIgnoreCase)
+                    ? nameof(DictionaryFormModel.Description)
+                    : null;
+            if (prop is null)
+            {
+                _formError = string.Join(" ", messages);
+                continue;
+            }
+            foreach (var message in messages)
+                _messages.Add(_editContext.Field(prop), message);
+        }
+        _editContext.NotifyValidationStateChanged();
+    }
+}

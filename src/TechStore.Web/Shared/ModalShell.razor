@@ -1,0 +1,29 @@
+@* Каркас модалки на Bootstrap-классах без JS: видимостью управляет C#-флаг родителя. *@
+<div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-label="@Title">
+    <div class="modal-dialog @DialogClass">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">@Title</h5>
+                <button type="button" class="btn-close" aria-label="Закрыть" @onclick="OnClose"></button>
+            </div>
+            <div class="modal-body">
+                @ChildContent
+            </div>
+            @if (FooterContent is not null)
+            {
+                <div class="modal-footer">
+                    @FooterContent
+                </div>
+            }
+        </div>
+    </div>
+</div>
+<div class="modal-backdrop fade show" @onclick="OnClose"></div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? FooterContent { get; set; }
+    [Parameter] public string DialogClass { get; set; } = "";
+    [Parameter] public EventCallback OnClose { get; set; }
+}

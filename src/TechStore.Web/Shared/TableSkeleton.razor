@@ -1,0 +1,20 @@
+@* Скелетон таблицы на время загрузки. *@
+<div class="skeleton-block" aria-label="Загрузка…">
+    @for (var i = 0; i < Rows; i++)
+    {
+        <div class="skeleton-row">
+            <span class="skeleton-cell" style="width: 48px"></span>
+            <span class="skeleton-cell" style="width: 12%"></span>
+            <span class="skeleton-cell" style="width: 16%"></span>
+            <span class="skeleton-cell" style="width: 26%"></span>
+            <span class="skeleton-cell" style="width: 12%"></span>
+            <span class="skeleton-cell ms-auto" style="width: 10%"></span>
+        </div>
+    }
+    <div class="text-muted small mt-2">@Text</div>
+</div>
+
+@code {
+    [Parameter] public int Rows { get; set; } = 5;
+    [Parameter] public string Text { get; set; } = "Загружаем…";
+}

@@ -1,16 +1,75 @@
-﻿@inherits LayoutComponentBase
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+@inherits LayoutComponentBase
+@inject InventoryHubClient Hub
+@inject HttpClient Http
 
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+<div class="app-shell">
+    @* Сайдбар: десктоп. На узких экранах — верхняя навигация. *@
+    <aside class="app-sidebar d-none d-md-flex">
+        <div class="app-brand">
+            <span class="app-brand-badge"><Icon Name="box" Size="18" /></span>
+            Техносклад
         </div>
+        <div class="app-nav-caption">Управление</div>
+        <nav class="nav flex-column gap-1">
+            <NavLink class="nav-link app-nav-link" href="/stock" Match="NavLinkMatch.All">
+                <Icon Name="box" /> Склад
+            </NavLink>
+            <NavLink class="nav-link app-nav-link" href="/dictionaries">
+                <Icon Name="book" /> Справочники
+            </NavLink>
+        </nav>
+        <div class="mt-auto d-flex flex-column gap-2 pb-1">
+            <a class="app-footer-link" href="@(ApiBase)scalar" target="_blank" rel="noopener">Документация API</a>
+            <span class="text-muted small">Версия 1.0</span>
+        </div>
+    </aside>
 
-        <article class="content px-4">
+    <nav class="navbar navbar-light bg-white border-bottom d-md-none px-3">
+        <span class="navbar-brand mb-0">Техносклад</span>
+        <div class="d-flex gap-3">
+            <NavLink class="app-nav-link" href="/stock" Match="NavLinkMatch.All">Склад</NavLink>
+            <NavLink class="app-nav-link" href="/dictionaries">Справочники</NavLink>
+        </div>
+    </nav>
+
+    <div class="app-main">
+        <header class="app-topbar">
+            <span class="sync-badge @SyncClass" title="Состояние realtime-подключения">
+                <span class="sync-dot"></span>@SyncText
+            </span>
+        </header>
+        <main class="app-content">
             @Body
-        </article>
-    </main>
+        </main>
+    </div>
 </div>
+
+<Toasts />
+
+@code {
+    private string ApiBase => Http.BaseAddress?.ToString() ?? "";
+
+    private string SyncText => Hub.State switch
+    {
+        HubConnectionState.Connected => "Данные синхронизированы",
+        HubConnectionState.Connecting => "Подключение…",
+        HubConnectionState.Failed => "Нет связи с сервером",
+        _ => "Автообновление выключено",
+    };
+
+    private string SyncClass => Hub.State switch
+    {
+        HubConnectionState.Connected => "sync-ok",
+        HubConnectionState.Connecting => "sync-warn",
+        HubConnectionState.Failed => "sync-bad",
+        _ => "sync-warn",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        Hub.StateChanged += OnHubStateChanged;
+        await Hub.StartAsync();
+    }
+
+    private void OnHubStateChanged() => InvokeAsync(StateHasChanged);
+}

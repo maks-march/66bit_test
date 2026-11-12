@@ -1,0 +1,356 @@
+@page "/dictionaries"
+@implements IDisposable
+@inject TechStoreApi Api
+@inject ToastService Toasts
+@inject InventoryHubClient Hub
+
+<PageTitle>Справочники — Техносклад</PageTitle>
+
+<h1 class="mb-1">Справочники</h1>
+<p class="text-muted">Производители и типы техники для вашего каталога</p>
+
+<ul class="nav nav-tabs my-3">
+    <li class="nav-item">
+        <button type="button" class="nav-link @(_tab == Tab.Manufacturers ? "active" : "")"
+                @onclick="() => SwitchTabAsync(Tab.Manufacturers)">
+            Производители
+        </button>
+    </li>
+    <li class="nav-item">
+        <button type="button" class="nav-link @(_tab == Tab.Types ? "active" : "")"
+                @onclick="() => SwitchTabAsync(Tab.Types)">
+            Типы техники
+        </button>
+    </li>
+</ul>
+
+<div class="d-flex align-items-center justify-content-between gap-2 mb-3">
+    <h2 class="h5 mb-0">
+        @(_tab == Tab.Manufacturers ? "Производители" : "Типы техники")
+        @if (CurrentTotal is int total)
+        {
+            <span class="text-muted fw-normal small ms-2">
+                @total @UiFormats.Plural(total, "запись", "записи", "записей")
+            </span>
+        }
+    </h2>
+    <button type="button" class="btn btn-primary text-nowrap" @onclick="OpenCreateDialog">
+        <Icon Name="plus" /> Добавить
+    </button>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        @if (_loading && CurrentCacheEmpty)
+        {
+            <div class="p-3"><TableSkeleton Text="Загружаем справочник…" /></div>
+        }
+        else if (_error is not null && CurrentCacheEmpty)
+        {
+            <ErrorState Title="Не удалось загрузить справочник" Message="@_error" OnRetry="() => ReloadAsync()" />
+        }
+        else if (CurrentTotal == 0)
+        {
+            <EmptyState Title="@(_tab == Tab.Manufacturers ? "Пока нет производителей" : "Пока нет типов техники")"
+                        Subtitle="Создайте первую запись в справочнике."
+                        ActionText="Добавить" OnAction="OpenCreateDialog" />
+        }
+        else if (_tab == Tab.Manufacturers && _makers is not null)
+        {
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th scope="col">Наименование</th>
+                            <th scope="col">Описание</th>
+                            <th scope="col" class="text-nowrap">Создан</th>
+                            <th scope="col" class="text-nowrap">Обновлён</th>
+                            <th scope="col" class="text-end">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var m in _makers.Items)
+                        {
+                            <tr @key="m.Id">
+                                <td class="fw-semibold">@m.Name</td>
+                                <td><span class="d-inline-block text-truncate align-middle" style="max-width: 420px" title="@m.Description">@m.Description</span></td>
+                                <td class="text-nowrap text-muted small">@UiFormats.Date(m.CreatedAt)</td>
+                                <td class="text-nowrap text-muted small">@UiFormats.Date(m.UpdatedAt)</td>
+                                <td class="text-end text-nowrap">
+                                    <button type="button" class="btn btn-link btn-sm action-btn" title="Редактировать"
+                                            @onclick="() => OpenEditDialog(m.Id, m.Name, m.Description)">
+                                        <Icon Name="edit" />
+                                    </button>
+                                    <button type="button" class="btn btn-link btn-sm action-btn text-danger" title="Удалить"
+                                            @onclick="() => OpenDeleteDialog(m.Id, m.Name)">
+                                        <Icon Name="trash" />
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else if (_tab == Tab.Types && _types is not null)
+        {
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th scope="col">Наименование</th>
+                            <th scope="col">Описание</th>
+                            <th scope="col" class="text-nowrap">Создан</th>
+                            <th scope="col" class="text-nowrap">Обновлён</th>
+                            <th scope="col" class="text-end">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var t in _types.Items)
+                        {
+                            <tr @key="t.Id">
+                                <td class="fw-semibold">@t.Name</td>
+                                <td><span class="d-inline-block text-truncate align-middle" style="max-width: 420px" title="@t.Description">@t.Description</span></td>
+                                <td class="text-nowrap text-muted small">@UiFormats.Date(t.CreatedAt)</td>
+                                <td class="text-nowrap text-muted small">@UiFormats.Date(t.UpdatedAt)</td>
+                                <td class="text-end text-nowrap">
+                                    <button type="button" class="btn btn-link btn-sm action-btn" title="Редактировать"
+                                            @onclick="() => OpenEditDialog(t.Id, t.Name, t.Description)">
+                                        <Icon Name="edit" />
+                                    </button>
+                                    <button type="button" class="btn btn-link btn-sm action-btn text-danger" title="Удалить"
+                                            @onclick="() => OpenDeleteDialog(t.Id, t.Name)">
+                                        <Icon Name="trash" />
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+    @if (CurrentTotal > 0)
+    {
+        <div class="card-footer bg-white">
+            <Pagination Page="_page" PageSize="_pageSize" TotalCount="CurrentTotal!.Value"
+                        OnPageChanged="OnPageChanged" OnPageSizeChanged="OnPageSizeChanged" />
+        </div>
+    }
+</div>
+
+@if (_dialogOpen)
+{
+    <DictionaryDialog @key="_dialogKey"
+                      Kind="@(_tab == Tab.Manufacturers ? DictionaryKind.Manufacturer : DictionaryKind.EquipmentType)"
+                      EditingId="_editingId" InitialName="_editingName" InitialDescription="_editingDescription"
+                      OnSaved="OnEntrySaved" OnCancel="CloseDialog" />
+}
+
+@if (_deletingId is not null)
+{
+    <ConfirmDialog Title="@(_tab == Tab.Manufacturers ? "Удалить производителя?" : "Удалить тип техники?")"
+                   Message="@($"{_deletingName} будет удалён из справочника.")"
+                   Hint="Если запись используется в позициях склада — удаление будет отклонено."
+                   ConfirmText="Удалить" Danger="true"
+                   OnConfirm="DeleteConfirmedAsync" OnCancel="() => _deletingId = null" />
+}
+
+@code {
+    private enum Tab { Manufacturers, Types }
+
+    private Tab _tab = Tab.Manufacturers;
+    private PagedResult<ManufacturerModel>? _makers;
+    private PagedResult<EquipmentTypeModel>? _types;
+    private bool _loading = true;
+    private string? _error;
+    private int _page = 1;
+    private int _pageSize = 20;
+
+    private bool _dialogOpen;
+    private int _dialogKey;
+    private long? _editingId;
+    private string? _editingName;
+    private string? _editingDescription;
+    private long? _deletingId;
+    private string? _deletingName;
+
+    private CancellationTokenSource? _loadCts;
+    private DateTime _lastHubToastUtc = DateTime.MinValue;
+
+    private int? CurrentTotal => _tab == Tab.Manufacturers ? _makers?.TotalCount : _types?.TotalCount;
+
+    private bool CurrentCacheEmpty => _tab == Tab.Manufacturers ? _makers is null : _types is null;
+
+    protected override void OnInitialized() => Hub.Changed += OnHubNotification;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    public void Dispose()
+    {
+        Hub.Changed -= OnHubNotification;
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+    }
+
+    private void OnHubNotification(InventoryChangeNotification notification)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await ReloadAsync(silent: true);
+            if (DateTime.UtcNow - _lastHubToastUtc > TimeSpan.FromSeconds(2))
+            {
+                _lastHubToastUtc = DateTime.UtcNow;
+                Toasts.Success("Справочник обновлён");
+            }
+        });
+    }
+
+    private Task SwitchTabAsync(Tab tab)
+    {
+        if (_tab == tab)
+            return Task.CompletedTask;
+        _tab = tab;
+        _page = 1;
+        // Закэшированный таб показываем сразу и тихо освежаем, новый — со скелетоном.
+        return CurrentCacheEmpty ? ReloadAsync() : ReloadAsync(silent: true);
+    }
+
+    private async Task ReloadAsync(bool resetPage = false, bool silent = false)
+    {
+        if (resetPage)
+            _page = 1;
+
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        var cts = _loadCts = new CancellationTokenSource();
+        var ct = cts.Token;
+
+        if (!silent)
+        {
+            _loading = true;
+            _error = null;
+        }
+
+        try
+        {
+            if (_tab == Tab.Manufacturers)
+            {
+                var data = await Api.ListManufacturersAsync(_page, _pageSize, ct);
+                if (data.Items.Count == 0 && data.TotalCount > 0 && _page > 1)
+                {
+                    _page--;
+                    await ReloadAsync();
+                    return;
+                }
+                _makers = data;
+            }
+            else
+            {
+                var data = await Api.ListEquipmentTypesAsync(_page, _pageSize, ct);
+                if (data.Items.Count == 0 && data.TotalCount > 0 && _page > 1)
+                {
+                    _page--;
+                    await ReloadAsync();
+                    return;
+                }
+                _types = data;
+            }
+            _error = null;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (ApiException ex) when (!silent)
+        {
+            _error = ex.Message;
+        }
+        catch (Exception) when (!silent)
+        {
+            _error = "Сервис временно недоступен. Попробуйте ещё раз.";
+        }
+        catch (Exception)
+        {
+        }
+        finally
+        {
+            if (!silent)
+                _loading = false;
+        }
+    }
+
+    private Task OnPageChanged(int page)
+    {
+        _page = page;
+        return ReloadAsync();
+    }
+
+    private Task OnPageSizeChanged(int size)
+    {
+        _pageSize = size;
+        return ReloadAsync(resetPage: true);
+    }
+
+    private void OpenCreateDialog()
+    {
+        _editingId = null;
+        _editingName = null;
+        _editingDescription = null;
+        _dialogKey++;
+        _dialogOpen = true;
+    }
+
+    private void OpenEditDialog(long id, string name, string? description)
+    {
+        _editingId = id;
+        _editingName = name;
+        _editingDescription = description;
+        _dialogKey++;
+        _dialogOpen = true;
+    }
+
+    private void CloseDialog()
+    {
+        _dialogOpen = false;
+        _editingId = null;
+    }
+
+    private async Task OnEntrySaved()
+    {
+        CloseDialog();
+        await ReloadAsync();
+    }
+
+    private void OpenDeleteDialog(long id, string name)
+    {
+        _deletingId = id;
+        _deletingName = name;
+    }
+
+    private async Task DeleteConfirmedAsync()
+    {
+        var id = _deletingId;
+        _deletingId = null;
+        if (id is null)
+            return;
+
+        try
+        {
+            if (_tab == Tab.Manufacturers)
+                await Api.DeleteManufacturerAsync(id.Value, CancellationToken.None);
+            else
+                await Api.DeleteEquipmentTypeAsync(id.Value, CancellationToken.None);
+            Toasts.Success("Запись удалена");
+            await ReloadAsync();
+        }
+        catch (ApiException ex)
+        {
+            // Сюда же приходит 409, если запись используется в позициях.
+            Toasts.Error(ex.Message, "Ошибка удаления");
+        }
+        catch (Exception)
+        {
+            Toasts.Error("Сервис временно недоступен.", "Ошибка удаления");
+        }
+    }
+}

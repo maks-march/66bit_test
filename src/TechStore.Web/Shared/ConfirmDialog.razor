@@ -1,0 +1,26 @@
+@* Удаление — только с подтверждением (Danger красит кнопку в красный). *@
+<ModalShell Title="@Title" OnClose="OnCancel">
+    <ChildContent>
+        <p class="mb-1">@Message</p>
+        @if (!string.IsNullOrEmpty(Hint))
+        {
+            <p class="text-muted small mb-0">@Hint</p>
+        }
+    </ChildContent>
+    <FooterContent>
+        <button type="button" class="btn btn-outline-secondary" @onclick="OnCancel">Отмена</button>
+        <button type="button" class="btn @(Danger ? "btn-danger" : "btn-primary")" @onclick="OnConfirm">
+            @ConfirmText
+        </button>
+    </FooterContent>
+</ModalShell>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Подтверждение";
+    [Parameter] public string Message { get; set; } = "";
+    [Parameter] public string? Hint { get; set; }
+    [Parameter] public string ConfirmText { get; set; } = "Подтвердить";
+    [Parameter] public bool Danger { get; set; }
+    [Parameter] public EventCallback OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+}

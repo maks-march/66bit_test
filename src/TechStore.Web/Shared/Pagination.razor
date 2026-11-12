@@ -1,0 +1,86 @@
+@* Серверная пагинация: «Показано 1–20 из 128», размер страницы, окно номеров. *@
+@if (TotalCount > 0)
+{
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div class="text-muted small">Показано @(From)–@(To) из @TotalCount</div>
+        <div class="d-flex align-items-center gap-3">
+            <label class="d-flex align-items-center gap-2 text-muted small mb-0">
+                Строк на странице:
+                <select class="form-select form-select-sm w-auto" value="@PageSize" @onchange="OnSizeChanged">
+                    @foreach (var size in PageSizeOptions)
+                    {
+                        <option value="@size">@size</option>
+                    }
+                </select>
+            </label>
+            @if (TotalPages > 1)
+            {
+                <nav aria-label="Страницы">
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item @(Page <= 1 ? "disabled" : "")">
+                            <button class="page-link" @onclick="() => ChangePageAsync(Page - 1)" aria-label="Назад">‹</button>
+                        </li>
+                        @foreach (var p in PageWindow())
+                        {
+                            if (p is null)
+                            {
+                                <li class="page-item disabled"><span class="page-link">…</span></li>
+                            }
+                            else
+                            {
+                                <li class="page-item @(p == Page ? "active" : "")">
+                                    <button class="page-link" @onclick="() => ChangePageAsync(p.Value)">@p</button>
+                                </li>
+                            }
+                        }
+                        <li class="page-item @(Page >= TotalPages ? "disabled" : "")">
+                            <button class="page-link" @onclick="() => ChangePageAsync(Page + 1)" aria-label="Вперёд">›</button>
+                        </li>
+                    </ul>
+                </nav>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Page { get; set; } = 1;
+    [Parameter] public int PageSize { get; set; } = 20;
+    [Parameter] public int TotalCount { get; set; }
+    [Parameter] public int[] PageSizeOptions { get; set; } = [10, 20, 50];
+    [Parameter] public EventCallback<int> OnPageChanged { get; set; }
+    [Parameter] public EventCallback<int> OnPageSizeChanged { get; set; }
+
+    private int TotalPages => PageSize <= 0 ? 0 : (int)Math.Ceiling((double)TotalCount / PageSize);
+    private int From => TotalCount == 0 ? 0 : (Page - 1) * PageSize + 1;
+    private int To => Math.Min(Page * PageSize, TotalCount);
+
+    private Task ChangePageAsync(int page)
+        => page >= 1 && page <= TotalPages && page != Page ? OnPageChanged.InvokeAsync(page) : Task.CompletedTask;
+
+    private Task OnSizeChanged(ChangeEventArgs e)
+        => int.TryParse(e.Value?.ToString(), out var size) && size != PageSize
+            ? OnPageSizeChanged.InvokeAsync(size)
+            : Task.CompletedTask;
+
+    /// <summary>Окно номеров: первая, соседи текущей, последняя, многоточия. Null = многоточие.</summary>
+    private IEnumerable<int?> PageWindow()
+    {
+        var total = TotalPages;
+        if (total <= 7)
+        {
+            for (var i = 1; i <= total; i++)
+                yield return i;
+            yield break;
+        }
+
+        yield return 1;
+        if (Page > 3)
+            yield return null;
+        for (var i = Math.Max(2, Page - 1); i <= Math.Min(total - 1, Page + 1); i++)
+            yield return i;
+        if (Page < total - 2)
+            yield return null;
+        yield return total;
+    }
+}

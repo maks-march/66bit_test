@@ -1,0 +1,22 @@
+@* Пустой список: иконка, заголовок, пояснение, кнопка действия. *@
+<div class="text-center py-5">
+    <div class="empty-icon mb-3">
+        <Icon Name="box" Size="48" />
+    </div>
+    <h5>@Title</h5>
+    @if (!string.IsNullOrEmpty(Subtitle))
+    {
+        <p class="text-muted mb-3">@Subtitle</p>
+    }
+    @if (!string.IsNullOrEmpty(ActionText))
+    {
+        <button type="button" class="btn btn-primary" @onclick="OnAction">@ActionText</button>
+    }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Пока пусто";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public string? ActionText { get; set; }
+    [Parameter] public EventCallback OnAction { get; set; }
+}

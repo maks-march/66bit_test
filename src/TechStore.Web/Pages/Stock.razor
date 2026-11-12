@@ -1,0 +1,464 @@
+@page "/stock"
+@implements IDisposable
+@inject TechStoreApi Api
+@inject ToastService Toasts
+@inject InventoryHubClient Hub
+
+<PageTitle>Склад — Техносклад</PageTitle>
+
+<div class="d-flex flex-wrap align-items-end justify-content-between gap-2">
+    <div>
+        <h1 class="mb-1">Склад техники</h1>
+        <p class="text-muted mb-0">Управляйте техникой, ценами и наличием в одном месте</p>
+    </div>
+    @if (_data is not null)
+    {
+        <span class="text-muted text-nowrap">@_data.TotalCount @UiFormats.Plural(_data.TotalCount, "позиция", "позиции", "позиций")</span>
+    }
+</div>
+
+<div class="d-flex gap-2 my-3">
+    <div class="search-box flex-grow-1">
+        <span class="search-icon"><Icon Name="search" /></span>
+        <input class="form-control" placeholder="Поиск по модели, производителю или стране"
+               value="@_search" @oninput="OnSearchInput" maxlength="200" />
+        @if (!string.IsNullOrEmpty(_search))
+        {
+            <button class="btn btn-link search-clear" title="Очистить" @onclick="ClearSearch">
+                <Icon Name="x" />
+            </button>
+        }
+    </div>
+    <button type="button" class="btn btn-primary text-nowrap" @onclick="OpenCreateDialog">
+        <Icon Name="plus" /> Добавить
+    </button>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-12 col-md-6 col-xl-3">
+                <label class="form-label">Тип</label>
+                <select class="form-select" @bind="_typeId" @bind:after="OnFilterChanged">
+                    <option value="">Все типы</option>
+                    @foreach (var t in _types)
+                    {
+                        <option value="@t.Id" disabled="@IsTypeDisabled(t.Id)">@t.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-xl-3">
+                <label class="form-label">Производитель</label>
+                <select class="form-select" @bind="_manufacturerId" @bind:after="OnFilterChanged">
+                    <option value="">Все производители</option>
+                    @foreach (var m in _manufacturers)
+                    {
+                        <option value="@m.Id" disabled="@IsManufacturerDisabled(m.Id)">@m.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-6 col-md-3 col-xl-2">
+                <label class="form-label">Цена от</label>
+                <InputNumber class="form-control" placeholder="Не задана"
+                             @bind-Value="_priceFrom" @bind-Value:after="OnFilterChanged" />
+            </div>
+            <div class="col-6 col-md-3 col-xl-2">
+                <label class="form-label">Цена до</label>
+                <InputNumber class="form-control" placeholder="Не задана"
+                             @bind-Value="_priceTo" @bind-Value:after="OnFilterChanged" />
+            </div>
+            @if (HasActiveFilters)
+            {
+                <div class="col-12 col-xl-2 d-flex align-items-end">
+                    <button type="button" class="btn btn-link px-0" @onclick="ClearFilters">Сбросить фильтры</button>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        @if (_loading && _data is null)
+        {
+            <div class="p-3"><TableSkeleton Text="Загружаем позиции…" /></div>
+        }
+        else if (_error is not null && _data is null)
+        {
+            <ErrorState Title="Не удалось загрузить позиции" Message="@_error" OnRetry="() => ReloadAsync()" />
+        }
+        else if (_data is not null && _data.TotalCount == 0)
+        {
+            @if (HasActiveFilters)
+            {
+                <EmptyState Title="Нет позиций с текущими фильтрами"
+                            ActionText="Сбросить фильтры" OnAction="ClearFilters" />
+            }
+            else
+            {
+                <EmptyState Title="Нет позиций — добавьте первую" Subtitle="Вся ваша техника будет собрана здесь."
+                            ActionText="Добавить" OnAction="OpenCreateDialog" />
+            }
+        }
+        else if (_data is not null)
+        {
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th scope="col">Фото</th>
+                            <th scope="col">Тип</th>
+                            <th scope="col">Производитель</th>
+                            <th scope="col" class="sortable" @onclick="@(() => SetSortAsync("model"))">
+                                Модель <span class="sort-arrow">@SortArrow("model")</span>
+                            </th>
+                            <th scope="col">Страна</th>
+                            <th scope="col" class="sortable text-end" @onclick="@(() => SetSortAsync("price"))">
+                                Цена <span class="sort-arrow">@SortArrow("price")</span>
+                            </th>
+                            <th scope="col" class="sortable text-nowrap" @onclick="@(() => SetSortAsync("createdAt"))">
+                                Создана <span class="sort-arrow">@SortArrow("createdAt")</span>
+                            </th>
+                            <th scope="col" class="sortable text-nowrap" @onclick="@(() => SetSortAsync("updatedAt"))">
+                                Обновлена <span class="sort-arrow">@SortArrow("updatedAt")</span>
+                            </th>
+                            <th scope="col" class="text-end">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in _data.Items)
+                        {
+                            <tr @key="item.Id">
+                                <td>
+                                    @if (Api.ResolvePhotoUrl(item.PhotoUrl) is string thumb)
+                                    {
+                                        <button type="button" class="thumb-btn" title="Посмотреть фото"
+                                                @onclick="() => _preview = item">
+                                            <img src="@thumb" alt="@item.Model" class="table-thumb" loading="lazy" />
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <span class="table-thumb table-thumb-empty"><Icon Name="image" /></span>
+                                    }
+                                </td>
+                                <td>@item.EquipmentType.Name</td>
+                                <td>@item.Manufacturer.Name</td>
+                                <td class="fw-semibold">@item.Model</td>
+                                <td>@item.SupplyCountry.Name</td>
+                                <td class="text-end text-nowrap">@UiFormats.Price(item.Price)</td>
+                                <td class="text-nowrap text-muted small">@UiFormats.Date(item.CreatedAt)</td>
+                                <td class="text-nowrap text-muted small">@UiFormats.Date(item.UpdatedAt)</td>
+                                <td class="text-end text-nowrap">
+                                    <button type="button" class="btn btn-link btn-sm action-btn" title="Редактировать"
+                                            @onclick="() => OpenEditDialog(item)">
+                                        <Icon Name="edit" />
+                                    </button>
+                                    <button type="button" class="btn btn-link btn-sm action-btn text-danger" title="Удалить"
+                                            @onclick="() => _deleting = item">
+                                        <Icon Name="trash" />
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+    @if (_data is not null && _data.TotalCount > 0)
+    {
+        <div class="card-footer bg-white">
+            <Pagination Page="_page" PageSize="_pageSize" TotalCount="_data.TotalCount"
+                        OnPageChanged="OnPageChanged" OnPageSizeChanged="OnPageSizeChanged" />
+        </div>
+    }
+</div>
+
+@if (_dialogOpen)
+{
+    <ItemDialog @key="_dialogKey" Editing="_editing" Types="_types" Manufacturers="_manufacturers"
+                OnSaved="OnItemSaved" OnCancel="CloseDialog" />
+}
+
+@if (_deleting is not null)
+{
+    <ConfirmDialog Title="Удалить позицию?" Message="@($"{_deleting.Model} будет удалён со склада.")"
+                   Hint="Это действие нельзя отменить." ConfirmText="Удалить" Danger="true"
+                   OnConfirm="DeleteConfirmedAsync" OnCancel="() => _deleting = null" />
+}
+
+@if (_preview is not null)
+{
+    <ModalShell Title="@_preview.Model" OnClose="() => _preview = null">
+        @if (Api.ResolvePhotoUrl(_preview.PhotoUrl) is string url)
+        {
+            <img src="@url" class="img-fluid rounded mx-auto d-block" alt="@_preview.Model" />
+        }
+        else
+        {
+            <p class="text-muted mb-0">У позиции нет фотографии.</p>
+        }
+    </ModalShell>
+}
+
+@code {
+    private PagedResult<EquipmentItemModel>? _data;
+    private FilterOptions? _facets;
+    private bool _loading = true;
+    private string? _error;
+
+    private string? _search;
+    private long? _typeId;
+    private long? _manufacturerId;
+    private decimal? _priceFrom;
+    private decimal? _priceTo;
+    private string _sortBy = "updatedAt";
+    private bool _sortDesc = true;
+    private int _page = 1;
+    private int _pageSize = 20;
+
+    private IReadOnlyList<EquipmentTypeModel> _types = [];
+    private IReadOnlyList<ManufacturerModel> _manufacturers = [];
+
+    private bool _dialogOpen;
+    private int _dialogKey;
+    private EquipmentItemModel? _editing;
+    private EquipmentItemModel? _deleting;
+    private EquipmentItemModel? _preview;
+
+    private CancellationTokenSource? _searchCts;
+    private CancellationTokenSource? _loadCts;
+    private DateTime _lastHubToastUtc = DateTime.MinValue;
+
+    private bool HasActiveFilters
+        => !string.IsNullOrWhiteSpace(_search) || _typeId.HasValue || _manufacturerId.HasValue
+            || _priceFrom.HasValue || _priceTo.HasValue;
+
+    protected override void OnInitialized() => Hub.Changed += OnHubNotification;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadDictionariesAsync(), ReloadAsync());
+    }
+
+    public void Dispose()
+    {
+        Hub.Changed -= OnHubNotification;
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+    }
+
+    /// <summary>SignalR: тихое обновление без скелетона + снекбар не чаще раза в 2 секунды.</summary>
+    private void OnHubNotification(InventoryChangeNotification notification)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await ReloadAsync(silent: true);
+            if (!notification.Kind.Equals("EquipmentItem", StringComparison.OrdinalIgnoreCase))
+                await LoadDictionariesAsync();
+            if (DateTime.UtcNow - _lastHubToastUtc > TimeSpan.FromSeconds(2))
+            {
+                _lastHubToastUtc = DateTime.UtcNow;
+                Toasts.Success("Список обновлён");
+            }
+        });
+    }
+
+    private async Task ReloadAsync(bool resetPage = false, bool silent = false)
+    {
+        if (resetPage)
+            _page = 1;
+
+        // Отменяем предыдущую загрузку: опоздавший ответ не должен затирать свежий.
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        var cts = _loadCts = new CancellationTokenSource();
+        var ct = cts.Token;
+
+        if (!silent)
+        {
+            _loading = true;
+            _error = null;
+        }
+
+        try
+        {
+            var searchTask = Api.SearchItemsAsync(
+                _search, _typeId, _manufacturerId, _priceFrom, _priceTo, _sortBy, _sortDesc, _page, _pageSize, ct);
+            var facetsTask = Api.GetFilterOptionsAsync(
+                _search, _typeId, _manufacturerId, _priceFrom, _priceTo, ct);
+            await Task.WhenAll(searchTask, facetsTask);
+
+            var data = await searchTask;
+            if (data.Items.Count == 0 && data.TotalCount > 0 && _page > 1)
+            {
+                // Страница опустела (например, после удаления) — шагаем назад.
+                _page--;
+                await ReloadAsync();
+                return;
+            }
+
+            _data = data;
+            _facets = await facetsTask;
+            _error = null;
+        }
+        catch (OperationCanceledException)
+        {
+            // Своя же отмена (новый ввод) — не ошибка.
+        }
+        catch (ApiException ex) when (!silent)
+        {
+            _error = ex.Message;
+        }
+        catch (Exception) when (!silent)
+        {
+            _error = "Сервис временно недоступен. Попробуйте ещё раз.";
+        }
+        catch (Exception)
+        {
+            // Тихое обновление не затирает показанные данные.
+        }
+        finally
+        {
+            if (!silent)
+                _loading = false;
+        }
+    }
+
+    private async Task LoadDictionariesAsync()
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var typesTask = Api.ListEquipmentTypesAsync(1, 100, cts.Token);
+            var makersTask = Api.ListManufacturersAsync(1, 100, cts.Token);
+            await Task.WhenAll(typesTask, makersTask);
+            _types = (await typesTask).Items;
+            _manufacturers = (await makersTask).Items;
+        }
+        catch (Exception)
+        {
+            // Молча: фильтры останутся пустыми, диалог предупредит сам.
+        }
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString();
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+        var cts = _searchCts = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(400, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        await ReloadAsync(resetPage: true);
+    }
+
+    private Task ClearSearch()
+    {
+        _search = null;
+        return ReloadAsync(resetPage: true);
+    }
+
+    private Task OnFilterChanged() => ReloadAsync(resetPage: true);
+
+    private Task ClearFilters()
+    {
+        _search = null;
+        _typeId = null;
+        _manufacturerId = null;
+        _priceFrom = null;
+        _priceTo = null;
+        return ReloadAsync(resetPage: true);
+    }
+
+    private Task SetSortAsync(string field)
+    {
+        if (_sortBy == field)
+            _sortDesc = !_sortDesc;
+        else
+        {
+            _sortBy = field;
+            _sortDesc = field != "model";
+        }
+        return ReloadAsync(resetPage: true);
+    }
+
+    private string SortArrow(string field)
+        => _sortBy != field ? "" : _sortDesc ? "↓" : "↑";
+
+    private Task OnPageChanged(int page)
+    {
+        _page = page;
+        return ReloadAsync();
+    }
+
+    private Task OnPageSizeChanged(int size)
+    {
+        _pageSize = size;
+        return ReloadAsync(resetPage: true);
+    }
+
+    private bool IsTypeDisabled(long id)
+        => _typeId != id && _facets is not null && !_facets.AvailableTypeIds.Contains(id);
+
+    private bool IsManufacturerDisabled(long id)
+        => _manufacturerId != id && _facets is not null && !_facets.AvailableManufacturerIds.Contains(id);
+
+    private void OpenCreateDialog()
+    {
+        _editing = null;
+        _dialogKey++;
+        _dialogOpen = true;
+    }
+
+    private void OpenEditDialog(EquipmentItemModel item)
+    {
+        _editing = item;
+        _dialogKey++;
+        _dialogOpen = true;
+    }
+
+    private void CloseDialog()
+    {
+        _dialogOpen = false;
+        _editing = null;
+    }
+
+    private async Task OnItemSaved()
+    {
+        CloseDialog();
+        await ReloadAsync();
+    }
+
+    private async Task DeleteConfirmedAsync()
+    {
+        var item = _deleting;
+        _deleting = null;
+        if (item is null)
+            return;
+
+        try
+        {
+            await Api.DeleteItemAsync(item.Id, CancellationToken.None);
+            Toasts.Success("Позиция удалена");
+            await ReloadAsync();
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Message, "Ошибка удаления");
+        }
+        catch (Exception)
+        {
+            Toasts.Error("Сервис временно недоступен.", "Ошибка удаления");
+        }
+    }
+}
