@@ -16,7 +16,7 @@ FROM nginx:alpine AS final
 WORKDIR /usr/share/nginx/html
 
 # Адрес API вшивается в appsettings.json статики (задаётся build-arg из compose)
-ARG API_BASE_URL=http://localhost:8080
+ARG API_BASE_URL=http://localhost:5020
 
 # Удаляем дефолтную страницу Nginx
 RUN rm -rf ./*
